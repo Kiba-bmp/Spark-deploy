@@ -407,4 +407,4 @@ Spark ставится в /home/team28b, sudo не нужен. Задачи ид
 
 ## Как повторить с нуля
 
-Всё на team-28-01 под team28b. HDFS, YARN, PostgreSQL, Metastore и HiveServer2 из прошлых домашек должны быть запущены. Проверяем python3 и что YARN видит три ноды. Скачиваем Spark, прописываем переменные, создаём spark-env.sh. Кладём jar-файлы Spark в HDFS. Создаём spark-defaults.conf и hive-site.xml для Spark. Проверяем сессию через pyspark. Генерируем CSV и кладём его в HDFS. Сохраняем код в ~/spark/jobs/events_stats.py и запускаем через spark-submit. Проверяем приложение в YARN, партиции в HDFS и таблицу через beeline.
+Всё на team-28-01 под team28b. HDFS, YARN, PostgreSQL, Metastore и HiveServer2 из прошлых домашек должны быть запущены. Проверяем python3 и что YARN видит три ноды. Скачиваем Spark, прописываем переменные, создаём spark-env.sh. Кладём jar-файлы Spark в HDFS. Создаём spark-defaults.conf и hive-site.xml для Spark. Проверяем сессию через pyspark. Генерируем CSV и кладём его в HDFS. Сохраняем код в ~/spark/jobs/events_stats.py и запускаем через spark-submit. Проверяем приложение в YARN, партиции в HDFS и таблицу через beeline
