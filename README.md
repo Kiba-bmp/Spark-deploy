@@ -48,7 +48,36 @@ Spark в ~/apps/spark, конфиги в ~/apps/spark/conf. Код задачи 
 
 Сервисов Spark не поднимает, поэтому новых постоянных портов нет. Единственное - Spark UI драйвера, пока работает задача. По умолчанию это 4040, его может занять Team A, поэтому у нас 4140, как и раньше со сдвигом +100.
 
-Остальные порты уже наши из прошлых домашек: HDFS 9100, ResourceManager UI 9088, Metastore 9183, HiveServer2 10100.
+Остальные порты уже наши из прошлых домашек: HDFS 9100, ResourceManager UI 9088, Metastore 9183, HiveServer2 10100. Ещё один добавляется в этой домашке: клиентский порт ResourceManager 9033, про него следующий раздел.
+
+## Адрес ResourceManager для клиентов
+
+Во второй домашке мы перенесли на свои порты планировщик, трекер ресурсов, admin и Web UI, но не клиентский адрес yarn.resourcemanager.address. Пока задачи не запускались, это было незаметно. А spark-submit как раз клиент YARN: через этот адрес он отдаёт приложение ResourceManager'у.
+
+Без этого свойства ResourceManager слушает порт по умолчанию 8032. Это плохо по двум причинам. Во-первых, 8032 - стандартный порт, его займёт YARN Team A. Во-вторых, адрес собирается из имени team-28-nn, а оно на самой этой машине резолвится ещё и в 127.0.1.1, так что порт может оказаться доступен только изнутри team-28-nn, и с team-28-01 Spark до него не достучится. Это та же история с 127.0.1.1, что и во второй домашке.
+
+Поэтому задаём адрес явно, через IP team-28-nn и свободный порт из нашего диапазона. Сначала проверяем на team-28-nn, что 9033 никто не занял:
+
+```bash
+ss -ltn | grep -E ':9033\b' || echo СВОБОДЕН
+```
+
+Дописываем свойство в yarn-site.xml на всех трёх узлах, чтобы конфиги оставались одинаковыми. Команда добавляет блок перед закрывающим тегом configuration и ничего не делает, если свойство уже есть:
+
+```bash
+grep -q 'yarn.resourcemanager.address' ~/apps/hadoop/etc/hadoop/yarn-site.xml || sed -i '$i\    <property>\n        <name>yarn.resourcemanager.address</name>\n        <value>10.28.0.11:9033</value>\n    </property>' ~/apps/hadoop/etc/hadoop/yarn-site.xml
+grep -A1 'yarn.resourcemanager.address' ~/apps/hadoop/etc/hadoop/yarn-site.xml
+```
+
+Перезапускаем только ResourceManager, на team-28-nn. NodeManager'ы трогать не нужно, они ходят к нему через трекер на 9031, который не менялся, и сами переподключатся:
+
+```bash
+yarn --daemon stop resourcemanager
+yarn --daemon start resourcemanager
+ss -ltn | grep -E ':9033\b'
+```
+
+Порт 9033 должен слушаться на 10.28.0.11.
 
 ## Что должно работать перед стартом
 
@@ -387,11 +416,11 @@ grep -icE "error|fatal|exception" ~/spark/logs/events_stats.log
 
 ## Изоляция от Team A
 
-Spark ставится в /home/team28b, sudo не нужен. Задачи идут в наш YARN, данные читаются и пишутся в наш HDFS на 9100, таблица регистрируется в нашем метасторе на 9183. Spark UI на 4140, стандартный 4040 не занимаем. Своих долгоживущих процессов Spark не оставляет: после spark.stop() приложение в YARN завершается и контейнеры освобождаются.
+Spark ставится в /home/team28b, sudo не нужен. Задачи идут в наш YARN, данные читаются и пишутся в наш HDFS на 9100, таблица регистрируется в нашем метасторе на 9183. Spark UI на 4140, клиентский порт ResourceManager на 9033, стандартные 4040 и 8032 не занимаем. Своих долгоживущих процессов Spark не оставляет: после spark.stop() приложение в YARN завершается и контейнеры освобождаются.
 
 ## Куда смотреть, если не работает
 
-Если spark-submit долго пишет Connecting to ResourceManager и Retrying connect to server на порту 8032, значит в нашем yarn-site.xml не задан yarn.resourcemanager.address, и клиент стучится на порт по умолчанию. Добавляем его в yarn-site.xml с тем же IP, что у остальных адресов ResourceManager, и свободным портом из нашего диапазона (например 9033), и перезапускаем ResourceManager.
+Если spark-submit долго пишет Connecting to ResourceManager и Retrying connect to server, значит клиент не видит ResourceManager на 10.28.0.11:9033. Проверяем, что свойство yarn.resourcemanager.address есть в yarn-site.xml на team-28-01 и что после правки ResourceManager перезапускали.
 
 Если задача висит на ACCEPTED и не переходит в RUNNING, YARN не может выделить контейнеры. Смотрим yarn node -list: все ли ноды RUNNING. И проверяем, что Team A не заняли сейчас всю память на машинах.
 
@@ -407,4 +436,4 @@ Spark ставится в /home/team28b, sudo не нужен. Задачи ид
 
 ## Как повторить с нуля
 
-Всё на team-28-01 под team28b. HDFS, YARN, PostgreSQL, Metastore и HiveServer2 из прошлых домашек должны быть запущены. Проверяем python3 и что YARN видит три ноды. Скачиваем Spark, прописываем переменные, создаём spark-env.sh. Кладём jar-файлы Spark в HDFS. Создаём spark-defaults.conf и hive-site.xml для Spark. Проверяем сессию через pyspark. Генерируем CSV и кладём его в HDFS. Сохраняем код в ~/spark/jobs/events_stats.py и запускаем через spark-submit. Проверяем приложение в YARN, партиции в HDFS и таблицу через beeline
+Всё на team-28-01 под team28b. HDFS, YARN, PostgreSQL, Metastore и HiveServer2 из прошлых домашек должны быть запущены. Задаём yarn.resourcemanager.address на всех узлах и перезапускаем ResourceManager. Проверяем python3 и что YARN видит три ноды. Скачиваем Spark, прописываем переменные, создаём spark-env.sh. Кладём jar-файлы Spark в HDFS. Создаём spark-defaults.conf и hive-site.xml для Spark. Проверяем сессию через pyspark. Генерируем CSV и кладём его в HDFS. Сохраняем код в ~/spark/jobs/events_stats.py и запускаем через spark-submit. Проверяем приложение в YARN, партиции в HDFS и таблицу через beeline
